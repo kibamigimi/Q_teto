@@ -296,7 +296,10 @@ export default function Home() {
       if (data.anyClear) {
         const key = Date.now(); setCollapseFx({ key, before: pending.before*2, after, rate });
         setTimeout(() => setCollapseFx((current) => current?.key === key ? null : current),1700);
-        makeTone(after === 1 ? 660 : 440,.3);
+        makeTone(after === 1 ? 550 : 330,.22);
+        setTimeout(() => makeTone(after === 1 ? 825 : 495,.2),90);
+        setTimeout(() => makeTone(after === 1 ? 1100 : 660,.32),190);
+        if (navigator.vibrate) navigator.vibrate(after === 1 ? [35,25,65] : [25,20,40]);
       }
       else makeTone(180,.06);
       setPair(pending.nextPair); setNext(pending.followingPair); setX(3); setY(-1); setRotation(0);
@@ -342,7 +345,7 @@ export default function Home() {
   const worlds = worldCount(boards); const danger = boards.filter((b) => heightOf(b) >= 16).reduce((n,b) => n+b.paths,0);
   const displayMode = boards.length <= 16 ? "FULL COLOR" : boards.length <= 100 ? "COLOR COMPACT" : boards.length <= 1000 ? "MICRO COLOR" : "COLOR STATES";
 
-  return <main>
+  return <main className={collapseFx ? "line-clear-active" : ""}>
     <header className="topbar">
       <div className="brand"><span className="brand-mark"><b>Q</b><i /></span><div><h1>QUANTUM <em>STACK</em></h1><p>MANY-WORLD STACKING PUZZLE</p></div></div>
       <div className="stats">
@@ -394,9 +397,11 @@ export default function Home() {
 
     {flash && <div className="flash" key={flash}>{flash}</div>}
     {collapseFx && <div className={`collapse-fx ${collapseFx.after === 1 ? "perfect" : ""}`} aria-hidden="true">
-      <div className="collapse-veil"/><div className="collapse-ring ring-one"/><div className="collapse-ring ring-two"/><div className="collapse-core"/>
+      <div className="collapse-veil"/><div className="collapse-lineburst">{Array.from({length:5},(_,index) => <i key={index} style={{"--row":`${34+index*8}%`,"--delay":`${index*.045}s`} as CSSProperties}/>)}</div>
+      <div className="collapse-rays"/><div className="collapse-ring ring-one"/><div className="collapse-ring ring-two"/><div className="collapse-core"/>
+      <div className="collapse-stars">{Array.from({length:20},(_,index) => <i key={index} style={{"--angle":`${index*18}deg`,"--distance":`${150+(index%5)*34}px`,"--delay":`${(index%6)*.035}s`} as CSSProperties}/>)}</div>
       <div className="collapse-particles">{Array.from({length:32},(_,index) => <i key={index} style={{"--angle":`${index*11.25}deg`,"--distance":`${120+(index%7)*22}px`,"--delay":`${(index%8)*.025}s`} as CSSProperties}/>)}</div>
-      <div className="collapse-copy"><small>POST-SELECTION EVENT</small><strong>{collapseFx.after === 1 ? "PERFECT COLLAPSE" : "WORLD COLLAPSE"}</strong><div><b>{collapseFx.before.toLocaleString()}</b><span>→</span><b>{collapseFx.after.toLocaleString()}</b></div><em>{(collapseFx.rate*100).toFixed(2)}% ELIMINATED</em></div>
+      <div className="collapse-copy"><small>LINE CLEAR / POST-SELECTION</small><strong>{collapseFx.after === 1 ? "PERFECT COLLAPSE" : "WORLD COLLAPSE"}</strong><div><b>{collapseFx.before.toLocaleString()}</b><span>→</span><b>{collapseFx.after.toLocaleString()}</b></div><em>{(collapseFx.rate*100).toFixed(2)}% ELIMINATED</em></div>
     </div>}
     {(paused || gameOver) && !help && <div className="overlay"><div><small>EXPERIMENT STATUS</small><h2>{gameOver ? gameOverReason === "limit" ? "WORLD LIMIT EXCEEDED" : "NO POSSIBLE WORLD" : "PAUSED"}</h2><p>{gameOver ? gameOverReason === "limit" ? "可能性が500,000状態を超えました。ブラウザーを保護するため実験を強制終了します。" : `${turn}ターンの観測で、すべての可能性が消滅しました。` : "可能性の時間発展を停止しています。"}</p><button onClick={gameOver ? restart : () => setPaused(false)}>{gameOver ? "NEW EXPERIMENT" : "RESUME"}</button></div></div>}
     {help && <div className="overlay help"><div><button className="close" onClick={() => setHelp(false)}>×</button><small>HOW TO PLAY</small><h2>2つを落とし、<br/><em>残る世界</em>を選ぶ。</h2><ol><li><b>重ね合わせる</b><span>色の混ざった2種類のミノを同時に動かします。</span></li><li><b>分岐する</b><span>着地すると各形が別々の盤面候補になります。</span></li><li><b>収束させる</b><span>どこかでラインが完成すると、その世界だけが残ります。</span></li></ol><button className="start" onClick={() => setHelp(false)}>START EXPERIMENT <span>SPACE</span></button></div></div>}
