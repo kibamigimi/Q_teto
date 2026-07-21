@@ -1,7 +1,7 @@
 const W = 10;
 const H = 20;
 const SIZE = W * H;
-const WORLD_LIMIT = 500000;
+const WORLD_LIMIT = 50000;
 const SHAPES = [
   null,
   [[0,1],[1,1],[2,1],[3,1]],

@@ -282,7 +282,7 @@ export default function Home() {
       const pending = pendingRef.current; if (!pending || data.jobId !== pending.jobId || data.jobId !== jobRef.current) return;
       if (data.limitExceeded) {
         setCalculating(false); pendingRef.current = null; setGameOver(true); setGameOverReason("limit");
-        setFlash("500,000 WORLD LIMIT"); makeTone(62,.65); return;
+        setFlash("50,000 WORLD LIMIT"); makeTone(62,.65); return;
       }
       const packed = new Uint8Array(data.cellsBuffer); const paths = new Float64Array(data.pathsBuffer); const lasts = new Uint8Array(data.lastBuffer); const heights = new Uint8Array(data.heightBuffer);
       const nextBoards: Board[] = Array.from({ length: data.count }, (_, index) => ({
@@ -405,7 +405,7 @@ export default function Home() {
       <div className="collapse-particles">{Array.from({length:32},(_,index) => <i key={index} style={{"--angle":`${index*11.25}deg`,"--distance":`${120+(index%7)*22}px`,"--delay":`${(index%8)*.025}s`} as CSSProperties}/>)}</div>
       <div className="collapse-copy"><small>POST-SELECTION EVENT</small><span className="clear-stamp">LINE CLEAR!</span><strong>{collapseFx.after === 1 ? "PERFECT COLLAPSE" : "WORLD COLLAPSE"}</strong><div><b>{collapseFx.before.toLocaleString()}</b><span>→</span><b>{collapseFx.after.toLocaleString()}</b></div><em>{(collapseFx.rate*100).toFixed(2)}% ELIMINATED</em></div>
     </div>}
-    {(paused || gameOver) && !help && <div className="overlay"><div><small>EXPERIMENT STATUS</small><h2>{gameOver ? gameOverReason === "limit" ? "WORLD LIMIT EXCEEDED" : "NO POSSIBLE WORLD" : "PAUSED"}</h2><p>{gameOver ? gameOverReason === "limit" ? "可能性が500,000状態を超えました。ブラウザーを保護するため実験を強制終了します。" : `${turn}ターンの観測で、すべての可能性が消滅しました。` : "可能性の時間発展を停止しています。"}</p><button onClick={gameOver ? restart : () => setPaused(false)}>{gameOver ? "NEW EXPERIMENT" : "RESUME"}</button></div></div>}
+    {(paused || gameOver) && !help && <div className="overlay"><div><small>EXPERIMENT STATUS</small><h2>{gameOver ? gameOverReason === "limit" ? "WORLD LIMIT EXCEEDED" : "NO POSSIBLE WORLD" : "PAUSED"}</h2><p>{gameOver ? gameOverReason === "limit" ? "可能性が50,000状態を超えました。ブラウザーを保護するため実験を強制終了します。" : `${turn}ターンの観測で、すべての可能性が消滅しました。` : "可能性の時間発展を停止しています。"}</p><button onClick={gameOver ? restart : () => setPaused(false)}>{gameOver ? "NEW EXPERIMENT" : "RESUME"}</button></div></div>}
     {help && <div className="overlay help"><div><button className="close" onClick={() => setHelp(false)}>×</button><small>HOW TO PLAY</small><h2>2つを落とし、<br/><em>残る世界</em>を選ぶ。</h2><ol><li><b>重ね合わせる</b><span>色の混ざった2種類のミノを同時に動かします。</span></li><li><b>分岐する</b><span>着地すると各形が別々の盤面候補になります。</span></li><li><b>収束させる</b><span>どこかでラインが完成すると、その世界だけが残ります。</span></li></ol><button className="start" onClick={() => setHelp(false)}>START EXPERIMENT <span>SPACE</span></button></div></div>}
   </main>;
 }
