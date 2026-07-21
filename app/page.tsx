@@ -111,10 +111,15 @@ function MiniShape({ id }: { id: MinoId }) {
   </div>;
 }
 
-function BoardCanvas({ board, pair, x, y, rotation, paused }: {
-  board: Board; pair: Pair; x: number; y: number; rotation: number; paused: boolean;
+function BoardCanvas({ board, pair, x, y, rotation, paused, onDisplaySize }: {
+  board: Board; pair: Pair; x: number; y: number; rotation: number; paused: boolean; onDisplaySize: (width: number, height: number) => void;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current; if (!canvas) return;
+    const report = () => { const rect = canvas.getBoundingClientRect(); if (rect.width > 0 && rect.height > 0) onDisplaySize(Math.round(rect.width),Math.round(rect.height)); };
+    report(); const observer = new ResizeObserver(report); observer.observe(canvas); return () => observer.disconnect();
+  }, [onDisplaySize]);
   useEffect(() => {
     const canvas = ref.current; if (!canvas) return;
     const ratio = window.devicePixelRatio || 1; const cssW = 300; const cssH = 600;
@@ -147,10 +152,15 @@ function BoardCanvas({ board, pair, x, y, rotation, paused }: {
   return <canvas className="focus-canvas" ref={ref} aria-label="選択中の候補盤面" />;
 }
 
-function SuperpositionCanvas({ boards, pair, x, y, rotation, paused }: {
-  boards: Board[]; pair: Pair; x: number; y: number; rotation: number; paused: boolean;
+function SuperpositionCanvas({ boards, pair, x, y, rotation, paused, onDisplaySize }: {
+  boards: Board[]; pair: Pair; x: number; y: number; rotation: number; paused: boolean; onDisplaySize: (width: number, height: number) => void;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current; if (!canvas) return;
+    const report = () => { const rect = canvas.getBoundingClientRect(); if (rect.width > 0 && rect.height > 0) onDisplaySize(Math.round(rect.width),Math.round(rect.height)); };
+    report(); const observer = new ResizeObserver(report); observer.observe(canvas); return () => observer.disconnect();
+  }, [onDisplaySize]);
   useEffect(() => {
     const canvas = ref.current; if (!canvas) return;
     const ratio = window.devicePixelRatio || 1; const cssW = 300; const cssH = 600; const cell = 30;
@@ -187,21 +197,21 @@ function SuperpositionCanvas({ boards, pair, x, y, rotation, paused }: {
   return <canvas className="focus-canvas aggregate-canvas" ref={ref} aria-label="すべての候補盤面を重ねた未観測表示" />;
 }
 
-function UniverseCanvas({ boards, selected, onSelect }: { boards: Board[]; selected: number; onSelect: (n: number) => void }) {
+function UniverseCanvas({ boards, selected, onSelect, initialTileSize }: { boards: Board[]; selected: number; onSelect: (n: number) => void; initialTileSize: { width: number; height: number } }) {
   const ref = useRef<HTMLCanvasElement>(null); const wrap = useRef<HTMLDivElement>(null); const layoutRef = useRef({ cols: 1, tileW: 1, tileH: 1 });
   useEffect(() => {
     const canvas = ref.current; const host = wrap.current; if (!canvas || !host) return;
     const draw = () => {
       const rect = host.getBoundingClientRect(); const width = Math.max(260, Math.floor(rect.width));
-      const n = boards.length; const detailed = n <= 16;
-      const aspect = detailed ? .58 : .62; const gap = n > 1000 ? 1 : n > 100 ? 3 : 8;
+      const n = boards.length; const gap = n > 1000 ? 1 : n > 100 ? 3 : 8;
       const minTile = n > 1000 ? 4 : 14;
-      const idealCols = Math.max(1, Math.ceil(Math.sqrt(n * width / Math.max(280, rect.height || 500) / aspect)));
-      const maxCols = Math.max(1, Math.floor((width + gap) / (minTile + gap)));
-      const cols = Math.min(idealCols, maxCols);
-      const tileW = Math.max(minTile, Math.floor((width - gap * (cols - 1)) / cols));
-      const tileH = Math.max(7, Math.round(tileW * 1.72));
-      const rows = Math.ceil(n / cols); const height = Math.max(310, rows * (tileH + gap));
+      const baseW = Math.max(minTile,initialTileSize.width); const baseH = Math.max(7,initialTileSize.height);
+      const branchScale = n === 1 ? 1 : Math.max(.08,Math.pow(n,-.32));
+      const cappedW = Math.max(minTile,Math.floor(baseW*branchScale));
+      const cols = n === 1 ? 1 : Math.min(n,Math.max(1,Math.floor((width+gap)/(cappedW+gap))));
+      const tileW = n === 1 ? baseW : Math.min(cappedW,Math.max(minTile,Math.floor((width-gap*(cols-1))/cols)));
+      const tileH = Math.max(7,Math.round(tileW*(baseH/baseW)));
+      const rows = Math.ceil(n / cols); const height = Math.max(baseH, rows * tileH + Math.max(0,rows-1)*gap);
       const fastRaster = n > 1500; const ratio = fastRaster ? 1 : window.devicePixelRatio || 1;
       canvas.width = width * ratio; canvas.height = height * ratio; canvas.style.height = `${height}px`;
       const ctx = canvas.getContext("2d"); if (!ctx) return;
@@ -254,7 +264,7 @@ function UniverseCanvas({ boards, selected, onSelect }: { boards: Board[]; selec
       });
     };
     draw(); const observer = new ResizeObserver(draw); observer.observe(host); return () => observer.disconnect();
-  }, [boards, selected]);
+  }, [boards, initialTileSize, selected]);
   return <div className="universe-wrap" ref={wrap}>
     <canvas ref={ref} onClick={(event) => {
       const r = event.currentTarget.getBoundingClientRect(); const l = layoutRef.current;
@@ -273,6 +283,7 @@ export default function Home() {
   const [score, setScore] = useState(0); const [turn, setTurn] = useState(1); const [maxWorlds, setMaxWorlds] = useState(1);
   const [collapse, setCollapse] = useState(0); const [flash, setFlash] = useState(""); const [help, setHelp] = useState(true);
   const [collapseFx, setCollapseFx] = useState<CollapseFx | null>(null);
+  const [boardDisplaySize, setBoardDisplaySize] = useState({ width: 250, height: 500 });
   const [calculating, setCalculating] = useState(false);
   const workerRef = useRef<Worker | null>(null); const jobRef = useRef(0);
   const pendingRef = useRef<{ jobId: number; before: number; nextPair: Pair; followingPair: Pair } | null>(null);
@@ -280,6 +291,9 @@ export default function Home() {
   const pullPair = useCallback((): Pair => {
     if (!bag.current.length) bag.current = shuffle(allPairs());
     return bag.current.pop()!;
+  }, []);
+  const updateBoardDisplaySize = useCallback((width: number, height: number) => {
+    setBoardDisplaySize((current) => current.width === width && current.height === height ? current : { width, height });
   }, []);
 
   const restart = useCallback(() => {
@@ -394,18 +408,19 @@ export default function Home() {
 
     <section className="game-layout minimal-layout">
       <aside className="left-panel panel minimal-left">
-        <div className="current-mino" aria-label={`現在のミノ ${pair[0]}と${pair[1]}`}>
-          <MiniShape id={pair[0]} /><span>＋</span><MiniShape id={pair[1]} />
-        </div>
         {selected >= 0 && <button className="return-all" onClick={() => setSelected(-1)} aria-label="全状態表示に戻る">ALL</button>}
         {boards.length ? selected >= 0
-          ? <BoardCanvas board={selectedBoard} pair={pair} x={x} y={y} rotation={rotation} paused={paused} />
-          : <SuperpositionCanvas boards={boards} pair={pair} x={x} y={y} rotation={rotation} paused={paused} />
+          ? <BoardCanvas board={selectedBoard} pair={pair} x={x} y={y} rotation={rotation} paused={paused} onDisplaySize={updateBoardDisplaySize} />
+          : <SuperpositionCanvas boards={boards} pair={pair} x={x} y={y} rotation={rotation} paused={paused} onDisplaySize={updateBoardDisplaySize} />
           : <div className="empty-board" />}
+        <div className="current-mino">
+          <div className="mino-slot" aria-label={`現在のミノ ${pair[0]}と${pair[1]}`}><b>CURRENT</b><div className="pair-preview"><MiniShape id={pair[0]} /><span>＋</span><MiniShape id={pair[1]} /></div></div>
+          <div className="mino-slot next-slot" aria-label={`次のミノ ${next[0]}と${next[1]}`}><b>NEXT</b><div className="pair-preview"><MiniShape id={next[0]} /><span>＋</span><MiniShape id={next[1]} /></div></div>
+        </div>
       </aside>
 
       <section className="universe-panel panel minimal-universe">
-        {boards.length ? <UniverseCanvas boards={boards} selected={selected} onSelect={(index) => setSelected((current) => current === index ? -1 : index)} /> : <div className="no-worlds"><b>∅</b></div>}
+        {boards.length ? <UniverseCanvas boards={boards} selected={selected} initialTileSize={boardDisplaySize} onSelect={(index) => setSelected((current) => current === index ? -1 : index)} /> : <div className="no-worlds"><b>∅</b></div>}
       </section>
     </section>
 
