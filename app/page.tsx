@@ -277,7 +277,8 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const worker = new Worker("/quantum-worker.js"); workerRef.current = worker;
+    const baseUrl = (import.meta as ImportMeta & { env?: { BASE_URL?: string } }).env?.BASE_URL ?? "/";
+    const worker = new Worker(`${baseUrl}quantum-worker.js`); workerRef.current = worker;
     worker.onmessage = ({ data }: MessageEvent<{ jobId: number; count: number; cellsBuffer: ArrayBuffer; pathsBuffer: ArrayBuffer; lastBuffer: ArrayBuffer; heightBuffer: ArrayBuffer; totalLines: number; anyClear: boolean; limitExceeded?: boolean; stateCount?: number }>) => {
       const pending = pendingRef.current; if (!pending || data.jobId !== pending.jobId || data.jobId !== jobRef.current) return;
       if (data.limitExceeded) {
