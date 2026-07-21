@@ -8,6 +8,7 @@ type Pair = [MinoId, MinoId];
 
 const W = 10;
 const H = 20;
+const SPAWN_Y = -4;
 const IDS: MinoId[] = ["I", "O", "T", "S", "Z", "J", "L"];
 const CELL_IDS: (MinoId | null)[] = [null, ...IDS];
 const CELL_CODE: Record<MinoId, number> = { I: 1, O: 2, T: 3, S: 4, Z: 5, J: 6, L: 7 };
@@ -137,7 +138,7 @@ function BoardCanvas({ board, pair, x, y, rotation, paused, onDisplaySize }: {
       ctx.fillStyle = "rgba(255,255,255,.16)"; ctx.fillRect(bx*cell+4,by*cell+4,cell-8,3);
     });
     pair.forEach((id, idx) => {
-      const ghostY = landingY(board, id, x, y, rotation);
+      const ghostY = landingY(board, id, x, SPAWN_Y, rotation);
       if (ghostY !== null) {
         ctx.strokeStyle = COLORS[id] + "88"; ctx.lineWidth = 2;
         points(id, rotation).forEach(([dx,dy]) => ctx.strokeRect((x+dx)*cell+4,(ghostY+dy)*cell+4,cell-8,cell-8));
@@ -305,6 +306,7 @@ export default function Home() {
 
   useEffect(() => { restart(); }, [restart]);
   const selectedBoard = boards[selected >= 0 ? Math.min(selected, boards.length - 1) : 0] ?? emptyBoard();
+  const controlBoard = boards[0] ?? emptyBoard();
 
   const makeTone = useCallback((frequency: number, duration = .08, type: OscillatorType = "sine", endFrequency = frequency, gainScale = 1) => {
     try { const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext; const ctx = new AudioCtx(); const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.type = type; osc.frequency.setValueAtTime(frequency,ctx.currentTime); osc.frequency.exponentialRampToValueAtTime(Math.max(1,endFrequency),ctx.currentTime+duration); gain.gain.setValueAtTime((type === "sine" ? .035 : .022)*Math.min(1.8,gainScale),ctx.currentTime); gain.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+duration); osc.connect(gain).connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime+duration); } catch { /* audio is optional */ }
@@ -353,21 +355,21 @@ export default function Home() {
     boards.forEach((board,index) => { packed.set(board.cells,index*W*H); pathCounts[index] = board.paths; });
     const jobId = ++jobRef.current; pendingRef.current = { jobId, before: worldCount(boards), nextPair: next, followingPair: pullPair() };
     setCalculating(true);
-    workerRef.current.postMessage({ jobId, count: boards.length, cellsBuffer: packed.buffer, pathsBuffer: pathCounts.buffer, pair: [CELL_CODE[pair[0]],CELL_CODE[pair[1]]], x, y, rotation }, [packed.buffer,pathCounts.buffer]);
-  }, [boards, calculating, gameOver, next, pair, paused, pullPair, rotation, x, y]);
+    workerRef.current.postMessage({ jobId, count: boards.length, cellsBuffer: packed.buffer, pathsBuffer: pathCounts.buffer, pair: [CELL_CODE[pair[0]],CELL_CODE[pair[1]]], x, rotation }, [packed.buffer,pathCounts.buffer]);
+  }, [boards, calculating, gameOver, next, pair, paused, pullPair, rotation, x]);
 
   const move = useCallback((dx: number) => {
     if (paused || gameOver || calculating) return; const nx = x + dx;
-    if (pair.some((id) => valid(selectedBoard,id,nx,y,rotation))) { setX(nx); makeTone(240,.025); }
-  }, [calculating, gameOver, makeTone, pair, paused, rotation, selectedBoard, x, y]);
+    if (pair.some((id) => valid(controlBoard,id,nx,y,rotation))) { setX(nx); makeTone(240,.025); }
+  }, [calculating, controlBoard, gameOver, makeTone, pair, paused, rotation, x, y]);
   const spin = useCallback((dir: number) => {
     if (paused || gameOver || calculating) return; const nr = (rotation+dir+4)%4;
-    if (pair.some((id) => valid(selectedBoard,id,x,y,nr))) { setRotation(nr); makeTone(320,.04); }
-  }, [calculating, gameOver, makeTone, pair, paused, rotation, selectedBoard, x, y]);
+    if (pair.some((id) => valid(controlBoard,id,x,y,nr))) { setRotation(nr); makeTone(320,.04); }
+  }, [calculating, controlBoard, gameOver, makeTone, pair, paused, rotation, x, y]);
   const down = useCallback(() => {
     if (paused || gameOver || calculating) return;
-    if (pair.some((id) => valid(selectedBoard,id,x,y+1,rotation))) setY((v) => v+1); else resolve();
-  }, [calculating, gameOver, pair, paused, resolve, rotation, selectedBoard, x, y]);
+    if (pair.some((id) => valid(controlBoard,id,x,y+1,rotation))) setY((value) => value+1); else resolve();
+  }, [calculating, controlBoard, gameOver, pair, paused, resolve, rotation, x, y]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -399,6 +401,10 @@ export default function Home() {
 
   return <main className={collapseFx ? `line-clear-active fx-tier-${collapseFx.tier}` : ""} style={mainFxStyle}>
     <header className="topbar minimal-topbar">
+      <div className="brand minimal-brand" aria-label="QUANTUM STACK">
+        <div className="brand-mark" aria-hidden="true"><b>Q</b><i /></div>
+        <h1><span>QUANTUM</span> <em>STACK</em></h1>
+      </div>
       <div className="stats minimal-stats">
         <div className={`state-count ${calculating ? "calculating" : ""}`}><span>状態数</span><strong>{worlds.toLocaleString()}</strong></div>
         <div><span>SCORE</span><strong>{score.toLocaleString()}</strong></div>
@@ -444,6 +450,6 @@ export default function Home() {
       <div className="collapse-copy"><small>POST-SELECTION EVENT · LEVEL {collapseFx.tier}</small><span className="clear-stamp">{collapseFx.tier >= 4 ? "MEGA LINE CLEAR!" : collapseFx.tier >= 2 ? "MASS LINE CLEAR!" : "LINE CLEAR!"}</span><strong>{collapseTitle(collapseFx)}</strong><span className="collapse-removed">−{collapseFx.removed.toLocaleString()} WORLDS</span><div><b>{collapseFx.before.toLocaleString()}</b><span>→</span><b>{collapseFx.after.toLocaleString()}</b></div><em>{(collapseFx.rate*100).toFixed(2)}% ELIMINATED</em></div>
     </div>}
     {(paused || gameOver) && !help && <div className="overlay"><div><small>EXPERIMENT STATUS</small><h2>{gameOver ? gameOverReason === "limit" ? "WORLD LIMIT EXCEEDED" : "NO POSSIBLE WORLD" : "PAUSED"}</h2><p>{gameOver ? gameOverReason === "limit" ? "可能性が50,000状態を超えました。ブラウザーを保護するため実験を強制終了します。" : `${turn}ターンの観測で、すべての可能性が消滅しました。` : "可能性の時間発展を停止しています。"}</p><button onClick={gameOver ? restart : () => setPaused(false)}>{gameOver ? "NEW EXPERIMENT" : "RESUME"}</button></div></div>}
-    {help && <div className="overlay help"><div><button className="close" onClick={() => setHelp(false)}>×</button><small>HOW TO PLAY</small><h2>2つを落とし、<br/><em>残る状態</em>を選ぶ。</h2><ol><li><b>分岐</b><span>2種類のミノが別々の状態になります。</span></li><li><b>収束</b><span>ラインが完成した状態だけが残ります。</span></li></ol><div className="help-controls"><span><kbd>← →</kbd>移動</span><span><kbd>↓</kbd>下へ</span><span><kbd>Z / X</kbd>回転</span><span><kbd>SPACE</kbd>落下・分岐</span><span><kbd>ESC</kbd>ポーズ</span></div><button className="start" onClick={() => setHelp(false)}>START</button></div></div>}
+    {help && <div className="overlay help"><div><button className="close" onClick={() => setHelp(false)}>×</button><small>HOW TO PLAY</small><h2>2つを落とし、<br/><em>残る状態</em>を選ぶ。</h2><ol><li><b>分岐</b><span>横位置と向きを決めると、2種類のミノが各状態へ別々に落下します。</span></li><li><b>収束</b><span>ラインが完成した状態だけが残ります。</span></li></ol><div className="help-controls"><span><kbd>← →</kbd>配置列</span><span><kbd>↓</kbd>落下を早める</span><span><kbd>Z / X</kbd>回転</span><span><kbd>SPACE</kbd>確定・独立落下</span><span><kbd>ESC</kbd>ポーズ</span></div><button className="start" onClick={() => setHelp(false)}>START</button></div></div>}
   </main>;
 }

@@ -2,6 +2,7 @@ const W = 10;
 const H = 20;
 const SIZE = W * H;
 const WORLD_LIMIT = 50000;
+const SPAWN_Y = -4;
 const SHAPES = [
   null,
   [[0,1],[1,1],[2,1],[3,1]],
@@ -73,7 +74,7 @@ function heightOf(cells) {
 }
 
 self.onmessage = ({ data }) => {
-  const { jobId, count, cellsBuffer, pathsBuffer, pair, x, y, rotation } = data;
+  const { jobId, count, cellsBuffer, pathsBuffer, pair, x, rotation } = data;
   const packed = new Uint8Array(cellsBuffer); const paths = new Float64Array(pathsBuffer);
   const clearedMap = new Map(); const plainMap = new Map();
   let clearedWorlds = 0; let plainWorlds = 0; let clearedExceeded = false; let plainExceeded = false; let totalLines = 0;
@@ -93,7 +94,7 @@ self.onmessage = ({ data }) => {
   for (let index = 0; index < count; index++) {
     const cells = packed.subarray(index*SIZE,(index+1)*SIZE); const pathCount = paths[index];
     for (const [id,shape] of [[pair[0],shapeA],[pair[1],shapeB]]) {
-      const ly = landingY(cells,shape,x,y); if (ly === null) continue;
+      const ly = landingY(cells,shape,x,SPAWN_Y); if (ly === null) continue;
       const result = place(cells,id,shape,x,ly); if (!result) continue;
       const branch = { cells: result.cells, paths: pathCount, last: id, cleared: result.cleared };
       record(branch,result.cleared > 0);
