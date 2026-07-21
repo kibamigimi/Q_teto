@@ -77,6 +77,26 @@ function mixedColor([a, b]: Pair, alpha = 1) {
 
 function worldCount(boards: Board[]) { return boards.reduce((sum, b) => sum + b.paths, 0); }
 
+type CollapseFx = {
+  key: number; before: number; after: number; removed: number; rate: number; tier: number;
+};
+
+function collapseTier(removed: number) {
+  if (removed >= 10000) return 5;
+  if (removed >= 1000) return 4;
+  if (removed >= 100) return 3;
+  if (removed >= 10) return 2;
+  return 1;
+}
+
+function collapseTitle(fx: CollapseFx) {
+  if (fx.after === 1) return "PERFECT COLLAPSE";
+  if (fx.tier === 5) return "QUANTUM ANNIHILATION";
+  if (fx.tier === 4) return "MASS EXTINCTION";
+  if (fx.tier === 3) return "MASSIVE COLLAPSE";
+  return "WORLD COLLAPSE";
+}
+
 function heightOf(board: Board) {
   return board.height;
 }
@@ -252,7 +272,7 @@ export default function Home() {
   const [gameOverReason, setGameOverReason] = useState<"extinction" | "limit" | null>(null);
   const [score, setScore] = useState(0); const [turn, setTurn] = useState(1); const [maxWorlds, setMaxWorlds] = useState(1);
   const [collapse, setCollapse] = useState(0); const [flash, setFlash] = useState(""); const [help, setHelp] = useState(true);
-  const [collapseFx, setCollapseFx] = useState<{ key: number; before: number; after: number; rate: number } | null>(null);
+  const [collapseFx, setCollapseFx] = useState<CollapseFx | null>(null);
   const [calculating, setCalculating] = useState(false);
   const workerRef = useRef<Worker | null>(null); const jobRef = useRef(0);
   const pendingRef = useRef<{ jobId: number; before: number; nextPair: Pair; followingPair: Pair } | null>(null);
@@ -272,8 +292,8 @@ export default function Home() {
   useEffect(() => { restart(); }, [restart]);
   const selectedBoard = boards[selected >= 0 ? Math.min(selected, boards.length - 1) : 0] ?? emptyBoard();
 
-  const makeTone = useCallback((frequency: number, duration = .08, type: OscillatorType = "sine", endFrequency = frequency) => {
-    try { const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext; const ctx = new AudioCtx(); const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.type = type; osc.frequency.setValueAtTime(frequency,ctx.currentTime); osc.frequency.exponentialRampToValueAtTime(Math.max(1,endFrequency),ctx.currentTime+duration); gain.gain.setValueAtTime(type === "sine" ? .035 : .022,ctx.currentTime); gain.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+duration); osc.connect(gain).connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime+duration); } catch { /* audio is optional */ }
+  const makeTone = useCallback((frequency: number, duration = .08, type: OscillatorType = "sine", endFrequency = frequency, gainScale = 1) => {
+    try { const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext; const ctx = new AudioCtx(); const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.type = type; osc.frequency.setValueAtTime(frequency,ctx.currentTime); osc.frequency.exponentialRampToValueAtTime(Math.max(1,endFrequency),ctx.currentTime+duration); gain.gain.setValueAtTime((type === "sine" ? .035 : .022)*Math.min(1.8,gainScale),ctx.currentTime); gain.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+duration); osc.connect(gain).connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime+duration); } catch { /* audio is optional */ }
   }, []);
 
   useEffect(() => {
@@ -295,13 +315,16 @@ export default function Home() {
       setCollapse(rate); setScore((value) => value + data.totalLines*100 + (data.anyClear ? Math.round(rate*1000) : 0));
       setBoards(nextBoards); setMaxWorlds((value) => Math.max(value,after)); setSelected(-1); setTurn((value) => value+1);
       if (data.anyClear) {
-        const key = Date.now(); setCollapseFx({ key, before: pending.before*2, after, rate });
-        setTimeout(() => setCollapseFx((current) => current?.key === key ? null : current),1700);
-        makeTone(130,.16,"sawtooth",48);
-        setTimeout(() => makeTone(after === 1 ? 550 : 330,.2,"triangle",after === 1 ? 720 : 440),45);
-        setTimeout(() => makeTone(after === 1 ? 825 : 495,.22,"triangle",after === 1 ? 1040 : 650),115);
-        setTimeout(() => makeTone(after === 1 ? 1100 : 660,.34,"sine",after === 1 ? 1320 : 880),210);
-        if (navigator.vibrate) navigator.vibrate(after === 1 ? [35,25,65] : [25,20,40]);
+        const before = pending.before*2; const removed = Math.max(1,before-after); const tier = collapseTier(removed); const power = 1+(tier-1)*.2;
+        const key = Date.now(); setCollapseFx({ key, before, after, removed, rate, tier });
+        setTimeout(() => setCollapseFx((current) => current?.key === key ? null : current),1700+(tier-1)*140);
+        makeTone(130,.16+(tier-1)*.035,"sawtooth",38,power);
+        setTimeout(() => makeTone(after === 1 ? 550 : 330,.2,"triangle",after === 1 ? 720 : 440,power),45);
+        setTimeout(() => makeTone(after === 1 ? 825 : 495,.22,"triangle",after === 1 ? 1040 : 650,power),115);
+        setTimeout(() => makeTone(after === 1 ? 1100 : 660,.34+(tier-1)*.04,"sine",after === 1 ? 1320 : 880,power),210);
+        if (tier >= 3) setTimeout(() => makeTone(165*tier,.38,"sawtooth",330*tier,power),300);
+        if (tier >= 5) setTimeout(() => makeTone(88,.62,"square",44,1.25),20);
+        if (navigator.vibrate) navigator.vibrate(after === 1 ? [35,25,65] : tier >= 4 ? [45,20,70,25,100] : tier >= 2 ? [30,18,55] : [25,20,40]);
       }
       else makeTone(180,.06);
       setPair(pending.nextPair); setNext(pending.followingPair); setX(3); setY(-1); setRotation(0);
@@ -344,69 +367,68 @@ export default function Home() {
   }, [down, move, resolve, spin]);
   useEffect(() => { if (paused || gameOver || help || calculating) return; const id = setInterval(down, 760); return () => clearInterval(id); }, [calculating, down, gameOver, help, paused]);
 
-  const worlds = worldCount(boards); const danger = boards.filter((b) => heightOf(b) >= 16).reduce((n,b) => n+b.paths,0);
-  const displayMode = boards.length <= 16 ? "FULL COLOR" : boards.length <= 100 ? "COLOR COMPACT" : boards.length <= 1000 ? "MICRO COLOR" : "COLOR STATES";
+  const worlds = worldCount(boards);
+  const fxPower = collapseFx ? 1+(collapseFx.tier-1)*.28 : 1;
+  const mainFxStyle = collapseFx ? {
+    "--shake-down": `${5+(collapseFx.tier-1)*2.5}px`,
+    "--shake-up": `${-4-(collapseFx.tier-1)*2}px`,
+    "--shake-settle": `${2+(collapseFx.tier-1)*1.1}px`,
+  } as CSSProperties : undefined;
+  const collapseFxStyle = collapseFx ? {
+    "--ring-size": `${150*fxPower}px`,
+    "--shock-width": `${150*fxPower}px`,
+    "--shock-height": `${70*fxPower}px`,
+  } as CSSProperties : undefined;
+  const lineBurstCount = collapseFx ? 4+collapseFx.tier : 0;
+  const starCount = collapseFx ? 20+(collapseFx.tier-1)*6 : 0;
+  const particleCount = collapseFx ? 32+(collapseFx.tier-1)*10 : 0;
 
-  return <main className={collapseFx ? "line-clear-active" : ""}>
-    <header className="topbar">
-      <div className="brand"><span className="brand-mark"><b>Q</b><i /></span><div><h1>QUANTUM <em>STACK</em></h1><p>MANY-WORLD STACKING PUZZLE</p></div></div>
-      <div className="stats">
-        <div><span>SCORE</span><strong>{score.toLocaleString()}</strong></div><div className="accent"><span>POSSIBLE WORLDS</span><strong>{worlds.toLocaleString()}</strong></div>
-        <div><span>MAX WORLDS</span><strong>{maxWorlds.toLocaleString()}</strong></div><div><span>COLLAPSE</span><strong>{(collapse*100).toFixed(1)}%</strong></div>
+  return <main className={collapseFx ? `line-clear-active fx-tier-${collapseFx.tier}` : ""} style={mainFxStyle}>
+    <header className="topbar minimal-topbar">
+      <div className="stats minimal-stats">
+        <div className={`state-count ${calculating ? "calculating" : ""}`}><span>状態数</span><strong>{worlds.toLocaleString()}</strong></div>
+        <div><span>SCORE</span><strong>{score.toLocaleString()}</strong></div>
       </div>
       <div className="header-actions"><button onClick={() => setHelp(true)} aria-label="遊び方">?</button><button onClick={() => setPaused((p) => !p)}>{paused ? "RESUME" : "PAUSE"}</button></div>
     </header>
 
-    <section className="game-layout">
-      <aside className="left-panel panel">
-        <div className="panel-title"><span>{selected >= 0 ? "SELECTED POSSIBILITY" : "UNOBSERVED SUPERPOSITION"}</span><small>{selected >= 0 ? `#${selected+1} / ${boards.length} · NOT COLLAPSED` : `${worlds.toLocaleString()} WORLDS OVERLAID`}</small></div>
+    <section className="game-layout minimal-layout">
+      <aside className="left-panel panel minimal-left">
+        <div className="current-mino" aria-label={`現在のミノ ${pair[0]}と${pair[1]}`}>
+          <MiniShape id={pair[0]} /><span>＋</span><MiniShape id={pair[1]} />
+        </div>
+        {selected >= 0 && <button className="return-all" onClick={() => setSelected(-1)} aria-label="全状態表示に戻る">ALL</button>}
         {boards.length ? selected >= 0
           ? <BoardCanvas board={selectedBoard} pair={pair} x={x} y={y} rotation={rotation} paused={paused} />
           : <SuperpositionCanvas boards={boards} pair={pair} x={x} y={y} rotation={rotation} paused={paused} />
           : <div className="empty-board" />}
-        <div className={`possibility-note ${selected >= 0 ? "inspecting" : ""}`}>
-          <i />{selected >= 0 ? "候補を拡大確認中 — 世界は確定していません" : "全候補の占有密度を重ねて表示 — 未確定状態"}
-          {selected >= 0 && <button onClick={() => setSelected(-1)}>全世界へ戻る</button>}
-        </div>
-        <div className="board-meta">{selected >= 0 ? <><span>HEIGHT <b>{heightOf(selectedBoard)}</b></span><span>PATHS <b>×{selectedBoard.paths}</b></span></> : <><span>MODE <b>DENSITY</b></span><span>WORLDS <b>{worlds}</b></span></>}<span>TURN <b>{turn}</b></span></div>
       </aside>
 
-      <section className="universe-panel panel">
-        <div className="panel-title"><span>SUPERPOSITION FIELD</span><small><i className={`live-dot ${calculating ? "calculating" : ""}`} /> {calculating ? "CALCULATING..." : displayMode}</small></div>
-        {boards.length ? <UniverseCanvas boards={boards} selected={selected} onSelect={setSelected} /> : <div className="no-worlds"><b>∅</b><span>NO POSSIBLE WORLD</span></div>}
+      <section className="universe-panel panel minimal-universe">
+        {boards.length ? <UniverseCanvas boards={boards} selected={selected} onSelect={(index) => setSelected((current) => current === index ? -1 : index)} /> : <div className="no-worlds"><b>∅</b></div>}
       </section>
-
-      <aside className="right-panel">
-        <section className="panel pair-card">
-          <div className="panel-title"><span>QUANTUM MINO</span><small>ACTIVE</small></div>
-          <div className="pair-equation"><div><MiniShape id={pair[0]} /><b style={{color:COLORS[pair[0]]}}>{pair[0]}</b></div><span>＋</span><div><MiniShape id={pair[1]} /><b style={{color:COLORS[pair[1]]}}>{pair[1]}</b></div></div>
-          <div className="mixed-swatch" style={{background:mixedColor(pair)}}><span>SUPERPOSED COLOR</span><b>{mixedColor(pair).replace("rgba(","RGB ").replace(",1)","")}</b></div>
-        </section>
-        <section className="panel next-card"><div className="panel-title"><span>NEXT PAIR</span><small>PAIR BAG</small></div><div className="next-row"><MiniShape id={next[0]} /><b>{next[0]}</b><span>＋</span><MiniShape id={next[1]} /><b>{next[1]}</b></div></section>
-        <section className="panel analysis-card"><div className="panel-title"><span>WORLD ANALYSIS</span></div>
-          <div className="analysis-row"><span>次の最大分岐</span><b>{(worlds*2).toLocaleString()}</b></div><div className="analysis-row"><span>独立盤面</span><b>{boards.length}</b></div><div className="analysis-row danger"><span>消滅危険候補</span><b>{danger}</b></div>
-        </section>
-        <button className="restart" onClick={restart}>↻ NEW EXPERIMENT</button>
-      </aside>
     </section>
 
-    <section className="controls-bar">
-      <button disabled={calculating} onClick={() => move(-1)}><kbd>←</kbd><span>LEFT</span></button><button disabled={calculating} onClick={() => move(1)}><kbd>→</kbd><span>RIGHT</span></button>
-      <button disabled={calculating} onClick={() => down()}><kbd>↓</kbd><span>SOFT DROP</span></button><button disabled={calculating} onClick={() => spin(-1)}><kbd>Z</kbd><span>ROTATE L</span></button>
-      <button disabled={calculating} onClick={() => spin(1)}><kbd>X</kbd><span>ROTATE R</span></button><button disabled={calculating} className="drop" onClick={resolve}><kbd>SPACE</kbd><span>{calculating ? "CALCULATING" : "BRANCH / DROP"}</span></button>
-      <p>ラインを作る世界だけが<strong>収束</strong>して生き残る</p>
+    <section className="controls-bar minimal-controls" aria-label="操作ボタン">
+      <button aria-label="左へ移動" title="左へ移動" disabled={calculating} onClick={() => move(-1)}><kbd>←</kbd></button>
+      <button aria-label="右へ移動" title="右へ移動" disabled={calculating} onClick={() => move(1)}><kbd>→</kbd></button>
+      <button aria-label="下へ移動" title="下へ移動" disabled={calculating} onClick={() => down()}><kbd>↓</kbd></button>
+      <button aria-label="左回転" title="左回転" disabled={calculating} onClick={() => spin(-1)}><kbd>↶</kbd></button>
+      <button aria-label="右回転" title="右回転" disabled={calculating} onClick={() => spin(1)}><kbd>↷</kbd></button>
+      <button aria-label="落下して分岐" title="落下して分岐" disabled={calculating} className="drop" onClick={resolve}><kbd>⤓</kbd></button>
     </section>
 
     {flash && <div className="flash" key={flash}>{flash}</div>}
-    {collapseFx && <div className={`collapse-fx ${collapseFx.after === 1 ? "perfect" : ""}`} aria-hidden="true">
-      <div className="collapse-flash"/><div className="collapse-veil"/><div className="collapse-slice"><i/><i/></div><div className="collapse-shockwave"><i/><i/></div>
-      <div className="collapse-lineburst">{Array.from({length:5},(_,index) => <i key={index} style={{"--row":`${34+index*8}%`,"--delay":`${index*.045}s`} as CSSProperties}/>)}</div>
-      <div className="collapse-rays"/><div className="collapse-ring ring-one"/><div className="collapse-ring ring-two"/><div className="collapse-core"/>
-      <div className="collapse-stars">{Array.from({length:20},(_,index) => <i key={index} style={{"--angle":`${index*18}deg`,"--distance":`${150+(index%5)*34}px`,"--delay":`${(index%6)*.035}s`} as CSSProperties}/>)}</div>
-      <div className="collapse-particles">{Array.from({length:32},(_,index) => <i key={index} style={{"--angle":`${index*11.25}deg`,"--distance":`${120+(index%7)*22}px`,"--delay":`${(index%8)*.025}s`} as CSSProperties}/>)}</div>
-      <div className="collapse-copy"><small>POST-SELECTION EVENT</small><span className="clear-stamp">LINE CLEAR!</span><strong>{collapseFx.after === 1 ? "PERFECT COLLAPSE" : "WORLD COLLAPSE"}</strong><div><b>{collapseFx.before.toLocaleString()}</b><span>→</span><b>{collapseFx.after.toLocaleString()}</b></div><em>{(collapseFx.rate*100).toFixed(2)}% ELIMINATED</em></div>
+    {collapseFx && <div className={`collapse-fx fx-tier-${collapseFx.tier} ${collapseFx.after === 1 ? "perfect" : ""}`} style={collapseFxStyle} aria-hidden="true">
+      <div className="collapse-flash"/><div className="collapse-veil"/><div className="collapse-slice">{Array.from({length:2+Math.floor((collapseFx.tier-1)/2)},(_,index) => <i key={index} style={{animationDelay:`${index*.055}s`}}/>)}</div>
+      <div className="collapse-shockwave">{Array.from({length:1+Math.ceil(collapseFx.tier/2)},(_,index) => <i key={index} style={{animationDelay:`${index*.075}s`}}/>)}</div>
+      <div className="collapse-lineburst">{Array.from({length:lineBurstCount},(_,index) => <i key={index} style={{"--row":`${26+index*(48/Math.max(1,lineBurstCount-1))}%`,"--delay":`${index*.035}s`} as CSSProperties}/>)}</div>
+      <div className="collapse-rays"/>{Array.from({length:2+Math.floor((collapseFx.tier-1)/2)},(_,index) => <div key={index} className={`collapse-ring ${index%2 ? "ring-two" : "ring-one"}`} style={{animationDelay:`${index*.07}s`}}/>)}<div className="collapse-core"/>
+      <div className="collapse-stars">{Array.from({length:starCount},(_,index) => <i key={index} style={{"--angle":`${index*(360/starCount)}deg`,"--distance":`${(150+(index%5)*34)*fxPower}px`,"--delay":`${(index%8)*.028}s`} as CSSProperties}/>)}</div>
+      <div className="collapse-particles">{Array.from({length:particleCount},(_,index) => <i key={index} style={{"--angle":`${index*(360/particleCount)}deg`,"--distance":`${(120+(index%7)*22)*fxPower}px`,"--delay":`${(index%10)*.02}s`} as CSSProperties}/>)}</div>
+      <div className="collapse-copy"><small>POST-SELECTION EVENT · LEVEL {collapseFx.tier}</small><span className="clear-stamp">{collapseFx.tier >= 4 ? "MEGA LINE CLEAR!" : collapseFx.tier >= 2 ? "MASS LINE CLEAR!" : "LINE CLEAR!"}</span><strong>{collapseTitle(collapseFx)}</strong><span className="collapse-removed">−{collapseFx.removed.toLocaleString()} WORLDS</span><div><b>{collapseFx.before.toLocaleString()}</b><span>→</span><b>{collapseFx.after.toLocaleString()}</b></div><em>{(collapseFx.rate*100).toFixed(2)}% ELIMINATED</em></div>
     </div>}
     {(paused || gameOver) && !help && <div className="overlay"><div><small>EXPERIMENT STATUS</small><h2>{gameOver ? gameOverReason === "limit" ? "WORLD LIMIT EXCEEDED" : "NO POSSIBLE WORLD" : "PAUSED"}</h2><p>{gameOver ? gameOverReason === "limit" ? "可能性が50,000状態を超えました。ブラウザーを保護するため実験を強制終了します。" : `${turn}ターンの観測で、すべての可能性が消滅しました。` : "可能性の時間発展を停止しています。"}</p><button onClick={gameOver ? restart : () => setPaused(false)}>{gameOver ? "NEW EXPERIMENT" : "RESUME"}</button></div></div>}
-    {help && <div className="overlay help"><div><button className="close" onClick={() => setHelp(false)}>×</button><small>HOW TO PLAY</small><h2>2つを落とし、<br/><em>残る世界</em>を選ぶ。</h2><ol><li><b>重ね合わせる</b><span>色の混ざった2種類のミノを同時に動かします。</span></li><li><b>分岐する</b><span>着地すると各形が別々の盤面候補になります。</span></li><li><b>収束させる</b><span>どこかでラインが完成すると、その世界だけが残ります。</span></li></ol><button className="start" onClick={() => setHelp(false)}>START EXPERIMENT <span>SPACE</span></button></div></div>}
+    {help && <div className="overlay help"><div><button className="close" onClick={() => setHelp(false)}>×</button><small>HOW TO PLAY</small><h2>2つを落とし、<br/><em>残る状態</em>を選ぶ。</h2><ol><li><b>分岐</b><span>2種類のミノが別々の状態になります。</span></li><li><b>収束</b><span>ラインが完成した状態だけが残ります。</span></li></ol><div className="help-controls"><span><kbd>← →</kbd>移動</span><span><kbd>↓</kbd>下へ</span><span><kbd>Z / X</kbd>回転</span><span><kbd>SPACE</kbd>落下・分岐</span><span><kbd>ESC</kbd>ポーズ</span></div><button className="start" onClick={() => setHelp(false)}>START</button></div></div>}
   </main>;
 }
