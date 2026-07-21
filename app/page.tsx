@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type TouchEvent } from "react";
 
 type MinoId = "I" | "O" | "T" | "S" | "Z" | "J" | "L";
 type Board = { cells: Uint8Array; paths: number; last: MinoId | null; height: number };
@@ -203,17 +203,34 @@ function UniverseCanvas({ boards, selected, onSelect, initialTileSize }: { board
   useEffect(() => {
     const canvas = ref.current; const host = wrap.current; if (!canvas || !host) return;
     const draw = () => {
-      const rect = host.getBoundingClientRect(); const width = Math.max(260, Math.floor(rect.width));
-      const n = boards.length; const gap = n > 1000 ? 1 : n > 100 ? 3 : 8;
-      const minTile = n > 1000 ? 4 : 14;
+      const rect = host.getBoundingClientRect(); const mobileFit = window.innerWidth <= 650 || (window.innerHeight <= 500 && window.innerWidth <= 950);
+      const width = Math.max(mobileFit ? 1 : 260,Math.floor(rect.width));
+      const n = boards.length;
+      const availableHeight = Math.max(1,Math.floor(rect.height));
+      const gap = mobileFit ? n > 500 ? 0 : n > 100 ? 1 : 3 : n > 1000 ? 1 : n > 100 ? 3 : 8;
+      const minTile = mobileFit ? 1 : n > 1000 ? 4 : 14;
       const baseW = Math.max(minTile,initialTileSize.width); const baseH = Math.max(7,initialTileSize.height);
-      const branchScale = n === 1 ? 1 : Math.max(.08,Math.pow(n,-.32));
-      const cappedW = Math.max(minTile,Math.floor(baseW*branchScale));
-      const cols = n === 1 ? 1 : Math.min(n,Math.max(1,Math.floor((width+gap)/(cappedW+gap))));
-      const tileW = n === 1 ? baseW : Math.min(cappedW,Math.max(minTile,Math.floor((width-gap*(cols-1))/cols)));
-      const tileH = Math.max(7,Math.round(tileW*(baseH/baseW)));
-      const rows = Math.ceil(n / cols); const height = Math.max(baseH, rows * tileH + Math.max(0,rows-1)*gap);
-      const fastRaster = n > 1500; const ratio = fastRaster ? 1 : window.devicePixelRatio || 1;
+      let cols: number; let tileW: number; let tileH: number; let height: number;
+      if (mobileFit && n > 1) {
+        let best = { cols:Math.min(n,width), tileW:1, tileH:1, area:1 };
+        for (let candidate = 1; candidate <= Math.min(n,width); candidate++) {
+          const candidateW = Math.max(1,Math.floor((width-gap*(candidate-1))/candidate));
+          const candidateH = Math.max(1,Math.round(candidateW*(baseH/baseW)));
+          const rows = Math.ceil(n/candidate);
+          const totalHeight = rows*candidateH+Math.max(0,rows-1)*gap;
+          const area = candidateW*candidateH;
+          if (totalHeight <= availableHeight && area > best.area) best = { cols:candidate,tileW:candidateW,tileH:candidateH,area };
+        }
+        cols = best.cols; tileW = best.tileW; tileH = best.tileH; height = availableHeight;
+      } else {
+        const branchScale = n === 1 ? 1 : Math.max(.08,Math.pow(n,-.32));
+        const cappedW = Math.max(minTile,Math.floor(baseW*branchScale));
+        cols = n === 1 ? 1 : Math.min(n,Math.max(1,Math.floor((width+gap)/(cappedW+gap))));
+        tileW = n === 1 ? baseW : Math.min(cappedW,Math.max(minTile,Math.floor((width-gap*(cols-1))/cols)));
+        tileH = Math.max(7,Math.round(tileW*(baseH/baseW)));
+        const rows = Math.ceil(n/cols); height = Math.max(baseH,rows*tileH+Math.max(0,rows-1)*gap);
+      }
+      const fastRaster = n > 1500 || tileW < 12; const ratio = fastRaster ? 1 : Math.min(1.5,window.devicePixelRatio || 1);
       canvas.width = width * ratio; canvas.height = height * ratio; canvas.style.height = `${height}px`;
       const ctx = canvas.getContext("2d"); if (!ctx) return;
       layoutRef.current = { cols, tileW: tileW + gap, tileH: tileH + gap };
@@ -287,6 +304,7 @@ export default function Home() {
   const [boardDisplaySize, setBoardDisplaySize] = useState({ width: 250, height: 500 });
   const [calculating, setCalculating] = useState(false);
   const workerRef = useRef<Worker | null>(null); const jobRef = useRef(0);
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
   const pendingRef = useRef<{ jobId: number; before: number; nextPair: Pair; followingPair: Pair } | null>(null);
 
   const pullPair = useCallback((): Pair => {
@@ -371,6 +389,23 @@ export default function Home() {
     if (pair.some((id) => valid(controlBoard,id,x,y+1,rotation))) setY((value) => value+1); else resolve();
   }, [calculating, controlBoard, gameOver, pair, paused, resolve, rotation, x, y]);
 
+  const handleTouchStart = useCallback((event: TouchEvent<HTMLElement>) => {
+    if (!(event.target instanceof HTMLCanvasElement)) return;
+    const touch = event.touches[0]; if (!touch) return;
+    touchStartRef.current = { x:touch.clientX, y:touch.clientY, time:performance.now() };
+  }, []);
+  const handleTouchEnd = useCallback((event: TouchEvent<HTMLElement>) => {
+    const start = touchStartRef.current; touchStartRef.current = null;
+    if (!start || !(event.target instanceof HTMLCanvasElement)) return;
+    const touch = event.changedTouches[0]; if (!touch) return;
+    const dx = touch.clientX-start.x; const dy = touch.clientY-start.y;
+    const elapsed = performance.now()-start.time; const ax = Math.abs(dx); const ay = Math.abs(dy);
+    if (Math.max(ax,ay) < 18) spin(1);
+    else if (ax > ay) move(dx > 0 ? 1 : -1);
+    else if (dy > 0 && (dy > 78 || (dy > 45 && elapsed < 220))) resolve();
+    else if (dy > 0) down();
+  }, [down, move, resolve, spin]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (["ArrowLeft","ArrowRight","ArrowDown"," "].includes(e.key)) e.preventDefault();
@@ -413,7 +448,7 @@ export default function Home() {
     </header>
 
     <section className="game-layout minimal-layout">
-      <aside className="left-panel panel minimal-left">
+      <aside className="left-panel panel minimal-left" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
         {selected >= 0 && <button className="return-all" onClick={() => setSelected(-1)} aria-label="全状態表示に戻る">ALL</button>}
         {boards.length ? selected >= 0
           ? <BoardCanvas board={selectedBoard} pair={pair} x={x} y={y} rotation={rotation} paused={paused} onDisplaySize={updateBoardDisplaySize} />
@@ -450,6 +485,6 @@ export default function Home() {
       <div className="collapse-copy"><small>POST-SELECTION EVENT · LEVEL {collapseFx.tier}</small><span className="clear-stamp">{collapseFx.tier >= 4 ? "MEGA LINE CLEAR!" : collapseFx.tier >= 2 ? "MASS LINE CLEAR!" : "LINE CLEAR!"}</span><strong>{collapseTitle(collapseFx)}</strong><span className="collapse-removed">−{collapseFx.removed.toLocaleString()} WORLDS</span><div><b>{collapseFx.before.toLocaleString()}</b><span>→</span><b>{collapseFx.after.toLocaleString()}</b></div><em>{(collapseFx.rate*100).toFixed(2)}% ELIMINATED</em></div>
     </div>}
     {(paused || gameOver) && !help && <div className="overlay"><div><small>EXPERIMENT STATUS</small><h2>{gameOver ? gameOverReason === "limit" ? "WORLD LIMIT EXCEEDED" : "NO POSSIBLE WORLD" : "PAUSED"}</h2><p>{gameOver ? gameOverReason === "limit" ? "可能性が50,000状態を超えました。ブラウザーを保護するため実験を強制終了します。" : `${turn}ターンの観測で、すべての可能性が消滅しました。` : "可能性の時間発展を停止しています。"}</p><button onClick={gameOver ? restart : () => setPaused(false)}>{gameOver ? "NEW EXPERIMENT" : "RESUME"}</button></div></div>}
-    {help && <div className="overlay help"><div><button className="close" onClick={() => setHelp(false)}>×</button><small>HOW TO PLAY</small><h2>2つを落とし、<br/><em>残る状態</em>を選ぶ。</h2><ol><li><b>分岐</b><span>横位置と向きを決めると、2種類のミノが各状態へ別々に落下します。</span></li><li><b>収束</b><span>ラインが完成した状態だけが残ります。</span></li></ol><div className="help-controls"><span><kbd>← →</kbd>配置列</span><span><kbd>↓</kbd>落下を早める</span><span><kbd>Z / X</kbd>回転</span><span><kbd>SPACE</kbd>確定・独立落下</span><span><kbd>ESC</kbd>ポーズ</span></div><button className="start" onClick={() => setHelp(false)}>START</button></div></div>}
+    {help && <div className="overlay help"><div><button className="close" onClick={() => setHelp(false)}>×</button><small>HOW TO PLAY</small><h2>2つを落とし、<br/><em>残る状態</em>を選ぶ。</h2><ol><li><b>分岐</b><span>横位置と向きを決めると、2種類のミノが各状態へ別々に落下します。</span></li><li><b>収束</b><span>ラインが完成した状態だけが残ります。</span></li></ol><div className="help-controls"><span><kbd>← →</kbd>配置列</span><span><kbd>↓</kbd>落下を早める</span><span><kbd>Z / X</kbd>回転</span><span><kbd>SPACE</kbd>確定・独立落下</span><span><kbd>SWIPE</kbd>移動・落下</span><span><kbd>TAP</kbd>右回転</span><span><kbd>ESC</kbd>ポーズ</span></div><button className="start" onClick={() => setHelp(false)}>START</button></div></div>}
   </main>;
 }
