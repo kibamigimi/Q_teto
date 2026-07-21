@@ -211,7 +211,12 @@ function UniverseCanvas({ boards, selected, onSelect, initialTileSize }: { board
       const minTile = mobileFit ? 1 : n > 1000 ? 4 : 14;
       const baseW = Math.max(minTile,initialTileSize.width); const baseH = Math.max(7,initialTileSize.height);
       let cols: number; let tileW: number; let tileH: number; let height: number;
-      if (mobileFit && n > 1) {
+      if (mobileFit && n === 1) {
+        const aspect = baseH/baseW;
+        tileW = Math.max(1,Math.min(width,Math.floor(availableHeight/aspect)));
+        tileH = Math.max(1,Math.round(tileW*aspect));
+        cols = 1; height = availableHeight;
+      } else if (mobileFit && n > 1) {
         let best = { cols:Math.min(n,width), tileW:1, tileH:1, area:1 };
         for (let candidate = 1; candidate <= Math.min(n,width); candidate++) {
           const candidateW = Math.max(1,Math.floor((width-gap*(candidate-1))/candidate));

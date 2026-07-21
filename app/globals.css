@@ -38,9 +38,9 @@ main { min-height:100vh; background:radial-gradient(circle at 45% 15%,rgba(44,73
   .minimal-brand{min-width:72px;gap:6px}.minimal-brand .brand-mark{width:29px;height:29px}.minimal-brand .brand-mark b{font-size:14px}.minimal-brand h1{font-size:9px}.minimal-brand h1 span{display:none}
   .minimal-stats{order:initial;width:auto;flex:1;align-self:stretch}.minimal-stats>div{min-width:64px;flex:1;padding:7px 5px 0}.minimal-stats span{font-size:7px}.minimal-stats strong{font-size:15px;margin-top:3px}
   .minimal-topbar .header-actions{margin-left:0;gap:4px}.minimal-topbar .header-actions button{height:30px;padding:0 7px;font-size:7px}.minimal-topbar .header-actions button:first-child{width:30px}
-  .minimal-layout{position:fixed;left:0;right:0;top:54px;bottom:calc(62px + env(safe-area-inset-bottom));height:auto;min-height:0;grid-template-columns:minmax(126px,42%) minmax(0,58%);gap:4px;padding:4px}
+  .minimal-layout{position:fixed;left:0;right:0;top:54px;bottom:calc(62px + env(safe-area-inset-bottom));height:auto;min-height:0;grid-template-columns:minmax(118px,38%) minmax(0,62%);gap:4px;padding:4px}
   .minimal-left,.minimal-universe{height:auto;min-height:0}
-  .minimal-left .focus-canvas{height:calc(100% - 68px);max-height:none;max-width:100%;margin:2px auto;touch-action:none}
+  .minimal-left .focus-canvas{width:min(calc(100% - 4px),calc((100dvh - 192px)/2));height:auto;max-width:none;max-height:none;aspect-ratio:1/2;margin:auto;touch-action:none}
   .current-mino{height:64px;flex:0 0 64px}.mino-slot{gap:3px}.mino-slot b{font-size:6px}.current-mino .mini-shape{width:25px;height:25px}.pair-preview{gap:3px}.pair-preview>span{font-size:9px}
   .minimal-universe .universe-wrap{height:100%;min-height:0;overflow:hidden;padding:2px}.minimal-universe .universe-wrap canvas{max-width:100%;touch-action:manipulation}
   .minimal-controls{position:fixed;z-index:6;left:0;right:0;bottom:0;height:calc(62px + env(safe-area-inset-bottom));padding:5px 5px calc(5px + env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(6,1fr);gap:4px}
