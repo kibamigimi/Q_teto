@@ -117,12 +117,10 @@ function BoardCanvas({ board, pair, x, y, rotation, paused }: {
         ctx.strokeStyle = COLORS[id] + "88"; ctx.lineWidth = 2;
         points(id, rotation).forEach(([dx,dy]) => ctx.strokeRect((x+dx)*cell+4,(ghostY+dy)*cell+4,cell-8,cell-8));
       }
-      ctx.shadowColor = COLORS[id]; ctx.shadowBlur = 12;
       ctx.fillStyle = mixedColor(pair, idx === 0 ? .72 : .5);
       points(id, rotation).forEach(([dx,dy]) => {
         const by = y+dy; if (by >= 0) ctx.fillRect((x+dx)*cell+2,by*cell+2,cell-4,cell-4);
       });
-      ctx.shadowBlur = 0;
     });
     if (paused) { ctx.fillStyle = "rgba(3,5,12,.72)"; ctx.fillRect(0,0,cssW,cssH); }
   }, [board, pair, x, y, rotation, paused]);
@@ -159,12 +157,10 @@ function SuperpositionCanvas({ boards, pair, x, y, rotation, paused }: {
       ctx.globalAlpha = 1;
     }
     pair.forEach((id, index) => {
-      ctx.shadowColor = COLORS[id]; ctx.shadowBlur = 12;
       ctx.fillStyle = mixedColor(pair, index === 0 ? .72 : .48);
       points(id, rotation).forEach(([dx,dy]) => {
         const by = y+dy; if (by >= 0) ctx.fillRect((x+dx)*cell+2,by*cell+2,cell-4,cell-4);
       });
-      ctx.shadowBlur = 0;
     });
     if (paused) { ctx.fillStyle = "rgba(3,5,12,.72)"; ctx.fillRect(0,0,cssW,cssH); }
   }, [boards, pair, paused, rotation, x, y]);
@@ -257,7 +253,6 @@ export default function Home() {
   const [score, setScore] = useState(0); const [turn, setTurn] = useState(1); const [maxWorlds, setMaxWorlds] = useState(1);
   const [collapse, setCollapse] = useState(0); const [flash, setFlash] = useState(""); const [help, setHelp] = useState(true);
   const [collapseFx, setCollapseFx] = useState<{ key: number; before: number; after: number; rate: number } | null>(null);
-  const [impactFx, setImpactFx] = useState<{ key: number; worlds: number; delta: number } | null>(null);
   const [calculating, setCalculating] = useState(false);
   const workerRef = useRef<Worker | null>(null); const jobRef = useRef(0);
   const pendingRef = useRef<{ jobId: number; before: number; nextPair: Pair; followingPair: Pair } | null>(null);
@@ -271,7 +266,7 @@ export default function Home() {
     jobRef.current++;
     bag.current = shuffle(allPairs()); const first = bag.current.pop()!; const second = bag.current.pop()!;
     setBoards([emptyBoard()]); setPair(first); setNext(second); setX(3); setY(-1); setRotation(0);
-    setSelected(-1); setPaused(false); setGameOver(false); setGameOverReason(null); setCalculating(false); setScore(0); setTurn(1); setMaxWorlds(1); setCollapse(0); setCollapseFx(null); setImpactFx(null); setFlash("");
+    setSelected(-1); setPaused(false); setGameOver(false); setGameOverReason(null); setCalculating(false); setScore(0); setTurn(1); setMaxWorlds(1); setCollapse(0); setCollapseFx(null); setFlash("");
   }, []);
 
   useEffect(() => { restart(); }, [restart]);
@@ -303,11 +298,7 @@ export default function Home() {
         setTimeout(() => setCollapseFx((current) => current?.key === key ? null : current),1700);
         makeTone(after === 1 ? 660 : 440,.3);
       }
-      else {
-        const key = Date.now(); setImpactFx({ key, worlds: after, delta: Math.max(0,after-pending.before) });
-        setTimeout(() => setImpactFx((current) => current?.key === key ? null : current),850);
-        makeTone(180,.06); setTimeout(() => makeTone(360,.07),55); setTimeout(() => makeTone(720,.09),115);
-      }
+      else makeTone(180,.06);
       setPair(pending.nextPair); setNext(pending.followingPair); setX(3); setY(-1); setRotation(0);
     };
     worker.onerror = () => { setCalculating(false); setFlash("CALCULATION ERROR"); };
@@ -351,7 +342,7 @@ export default function Home() {
   const worlds = worldCount(boards); const danger = boards.filter((b) => heightOf(b) >= 16).reduce((n,b) => n+b.paths,0);
   const displayMode = boards.length <= 16 ? "FULL COLOR" : boards.length <= 100 ? "COLOR COMPACT" : boards.length <= 1000 ? "MICRO COLOR" : "COLOR STATES";
 
-  return <main className={`${impactFx ? "impact-active" : ""} ${collapseFx ? "collapse-active" : ""}`}>
+  return <main>
     <header className="topbar">
       <div className="brand"><span className="brand-mark"><b>Q</b><i /></span><div><h1>QUANTUM <em>STACK</em></h1><p>MANY-WORLD STACKING PUZZLE</p></div></div>
       <div className="stats">
@@ -402,11 +393,6 @@ export default function Home() {
     </section>
 
     {flash && <div className="flash" key={flash}>{flash}</div>}
-    {impactFx && <div className="impact-fx" key={impactFx.key} aria-hidden="true">
-      <div className="impact-rays"/><div className="impact-wave wave-a"/><div className="impact-wave wave-b"/>
-      <div className="impact-shards">{Array.from({length:28},(_,index) => <i key={index} style={{"--angle":`${index*(360/28)}deg`,"--delay":`${(index%7)*.018}s`,"--size":`${34+(index%5)*12}px`} as CSSProperties}/>)}</div>
-      <div className="impact-copy"><small>QUANTUM BRANCH</small><strong>WORLD SPLIT!</strong><b>{impactFx.worlds.toLocaleString()} WORLDS</b>{impactFx.delta > 0 && <em>＋{impactFx.delta.toLocaleString()} NEW STATES</em>}</div>
-    </div>}
     {collapseFx && <div className={`collapse-fx ${collapseFx.after === 1 ? "perfect" : ""}`} aria-hidden="true">
       <div className="collapse-veil"/><div className="collapse-ring ring-one"/><div className="collapse-ring ring-two"/><div className="collapse-core"/>
       <div className="collapse-particles">{Array.from({length:32},(_,index) => <i key={index} style={{"--angle":`${index*11.25}deg`,"--distance":`${120+(index%7)*22}px`,"--delay":`${(index%8)*.025}s`} as CSSProperties}/>)}</div>
